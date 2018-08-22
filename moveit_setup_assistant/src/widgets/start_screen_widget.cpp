@@ -67,7 +67,7 @@ namespace moveit_setup_assistant
 namespace fs = boost::filesystem;
 
 // ******************************************************************************************
-// Start screen user interface for MoveIt Configuration Assistant
+// Start screen user interface for MoveIt! Configuration Assistant
 // ******************************************************************************************
 StartScreenWidget::StartScreenWidget(QWidget* parent, moveit_setup_assistant::MoveItConfigDataPtr config_data)
   : SetupScreenWidget(parent), config_data_(config_data)
@@ -122,13 +122,14 @@ StartScreenWidget::StartScreenWidget(QWidget* parent, moveit_setup_assistant::Mo
   right_layout->setAlignment(right_image_label_, Qt::AlignRight | Qt::AlignTop);
 
   // Top Label Area ---------------------------------------------------
-  HeaderWidget* header = new HeaderWidget(
-      "MoveIt Setup Assistant", "Welcome to the MoveIt Setup Assistant! These tools will assist you in creating a "
-                                "MoveIt configuration package that is required to run MoveIt. This includes generating "
-                                "a Semantic Robot Description Format (SRDF) file, kinematics configuration file and "
-                                "OMPL planning configuration file. It also involves creating launch files for move "
-                                "groups, OMPL planner, planning contexts and the planning warehouse.",
-      this);
+  HeaderWidget* header =
+      new HeaderWidget("MoveIt! Setup Assistant",
+                       "Welcome to the MoveIt! Setup Assistant! These tools will assist you in creating a "
+                       "MoveIt! configuration package that is required to run MoveIt. This includes generating "
+                       "a Semantic Robot Description Format (SRDF) file, kinematics configuration file and "
+                       "OMPL planning configuration file. It also involves creating launch files for move "
+                       "groups, OMPL planner, planning contexts and the planning warehouse.",
+                       this);
   layout->addWidget(header);
 
   // Select Mode Area -------------------------------------------------
@@ -141,8 +142,8 @@ StartScreenWidget::StartScreenWidget(QWidget* parent, moveit_setup_assistant::Mo
 
   // Stack Path Dialog
   stack_path_ =
-      new LoadPathArgsWidget("Load MoveIt Configuration Package Path",
-                             "Specify the package name or path of an existing MoveIt configuration package to be "
+      new LoadPathArgsWidget("Load MoveIt! Configuration Package Path",
+                             "Specify the package name or path of an existing MoveIt! configuration package to be "
                              "edited for your robot. Example package name: <i>pr2_moveit_config</i>",
                              "xacro arguments", this, true);  // directory
   stack_path_->hide();                                        // user needs to select option before this is shown
@@ -287,6 +288,8 @@ void StartScreenWidget::loadFilesClick()
   if (create_new_package_)
   {
     result = loadNewFiles();
+    // Load 3d_sensors config file
+    load3DSensorsFile();
   }
   else
   {
@@ -353,7 +356,7 @@ bool StartScreenWidget::loadPackageSettings(bool show_warnings)
     if (show_warnings)
       QMessageBox::warning(
           this, "Incorrect Directory/Package",
-          QString("The chosen package location exists but was not created using MoveIt Setup Assistant. "
+          QString("The chosen package location exists but was not created using MoveIt! Setup Assistant. "
                   "If this is a mistake, provide the missing file: ")
               .append(setup_assistant_path.c_str()));
     return false;
@@ -430,6 +433,9 @@ bool StartScreenWidget::loadExistingFiles()
                                  "at location ")
                              .append(kinematics_yaml_path.make_preferred().native().c_str()));
   }
+
+  // Load 3d_sensors config file
+  load3DSensorsFile();
 
   // Load ros controllers yaml file if available-----------------------------------------------
   fs::path ros_controllers_yaml_path = config_data_->config_pkg_path_;
@@ -550,22 +556,21 @@ bool StartScreenWidget::loadURDFFile(const std::string& urdf_file_path, const st
 {
   const std::vector<std::string> xacro_args_ = { xacro_args };
 
-  std::string urdf_string;
-  if (!rdf_loader::RDFLoader::loadXmlFileToString(urdf_string, urdf_file_path, xacro_args_))
+  if (!rdf_loader::RDFLoader::loadXmlFileToString(config_data_->urdf_string_, urdf_file_path, xacro_args_))
   {
     QMessageBox::warning(this, "Error Loading Files",
                          QString("URDF/COLLADA file not found: ").append(urdf_file_path.c_str()));
     return false;
   }
 
-  if (urdf_string.empty() && rdf_loader::RDFLoader::isXacroFile(urdf_file_path))
+  if (config_data_->urdf_string_.empty() && rdf_loader::RDFLoader::isXacroFile(urdf_file_path))
   {
     QMessageBox::warning(this, "Error Loading Files", "Running xacro failed.\nPlease check console for errors.");
     return false;
   }
 
   // Verify that file is in correct format / not an XACRO by loading into robot model
-  if (!config_data_->urdf_model_->initString(urdf_string))
+  if (!config_data_->urdf_model_->initString(config_data_->urdf_string_))
   {
     QMessageBox::warning(this, "Error Loading Files", "URDF/COLLADA file is not a valid robot model.");
     return false;
@@ -587,7 +592,7 @@ bool StartScreenWidget::loadURDFFile(const std::string& urdf_file_path, const st
 
   ROS_INFO("Setting Param Server with Robot Description");
   // ROS_WARN("Ignore the following error message 'Failed to contact master'. This is a known issue.");
-  nh.setParam("/robot_description", urdf_string);
+  nh.setParam("/robot_description", config_data_->urdf_string_);
 
   return true;
 }
@@ -787,6 +792,29 @@ bool StartScreenWidget::createFullSRDFPath(const std::string& package_path)
 }
 
 // ******************************************************************************************
+// Loads sensors_3d yaml file
+// ******************************************************************************************
+bool StartScreenWidget::load3DSensorsFile()
+{
+  // Loads sensors_3d yaml file if available --------------------------------------------------
+  fs::path sensors_3d_yaml_path = config_data_->config_pkg_path_;
+  sensors_3d_yaml_path /= "config/sensors_3d.yaml";
+
+  // If config was not available, load default configuration
+  if (!fs::is_regular_file(sensors_3d_yaml_path))
+  {
+    sensors_3d_yaml_path = "resources/default_config/sensors_3d.yaml";
+    return config_data_->input3DSensorsYAML(sensors_3d_yaml_path.make_preferred().native().c_str());
+  }
+  else
+  {
+    fs::path default_sensors_3d_yaml_path = "resources/default_config/sensors_3d.yaml";
+    return config_data_->input3DSensorsYAML(default_sensors_3d_yaml_path.make_preferred().native().c_str(),
+                                            sensors_3d_yaml_path.make_preferred().native().c_str());
+  }
+}
+
+// ******************************************************************************************
 // ******************************************************************************************
 // Class for selecting which mode
 // ******************************************************************************************
@@ -819,9 +847,9 @@ SelectModeWidget::SelectModeWidget(QWidget* parent) : QFrame(parent)
 
   // Widget Instructions
   QTextEdit* widget_instructions = new QTextEdit(this);
-  widget_instructions->setText("All settings for MoveIt are stored in a Moveit configuration package. Here you have "
+  widget_instructions->setText("All settings for MoveIt! are stored in a Moveit configuration package. Here you have "
                                "the option to create a new configuration package, or load an existing one. Note: any "
-                               "changes to a MoveIt configuration package outside this setup assistant will likely be "
+                               "changes to a MoveIt! configuration package outside this setup assistant will likely be "
                                "overwritten by this tool.");
   widget_instructions->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
   // widget_instructions->setMinimumWidth(1);
